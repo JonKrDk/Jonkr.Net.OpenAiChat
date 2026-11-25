@@ -1,4 +1,5 @@
 using Jonkr.Net.OpenAiChat.WebApp.Components;
+using Jonkr.Net.OpenAiChat.WebApp.Services;
 
 namespace Jonkr.Net.OpenAiChat.WebApp
 {
@@ -11,6 +12,9 @@ namespace Jonkr.Net.OpenAiChat.WebApp
             // Add services to the container.
             builder.Services.AddRazorComponents()
                 .AddInteractiveServerComponents();
+
+            builder.Services.Configure<OpenAiOptions>(builder.Configuration.GetSection("OpenAI"));
+            builder.Services.AddSingleton<OpenAiChatService>();
 
             var app = builder.Build();
 

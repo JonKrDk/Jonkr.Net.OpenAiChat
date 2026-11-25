@@ -1,0 +1,162 @@
+@page "/chat"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@inject OpenAiChatService ChatService
+@inject IJSRuntime JS
+
+<PageTitle>Chat</PageTitle>
+
+<div class="chat-container">
+    <div class="chat-header">
+        <h1 class="h4 mb-0">Chat</h1>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="Clear" disabled="@(_messages.Count == 0 && !_busy)">New chat</button>
+    </div>
+
+    <div class="chat-messages" @ref="_messagesElement">
+        @if (_messages.Count == 0)
+        {
+            <p class="text-muted text-center mt-5">Ask me anything.</p>
+        }
+        @foreach (var m in _messages)
+        {
+            <div class="chat-row @(m.Role == ChatRole.User ? "chat-row-user" : "chat-row-assistant")">
+                <div class="chat-bubble @(m.Role == ChatRole.User ? "chat-bubble-user" : "chat-bubble-assistant")">
+                    @if (m.Content.Length == 0 && _busy)
+                    {
+                        <span class="text-muted">…</span>
+                    }
+                    else
+                    {
+                        @m.Content
+                    }
+                </div>
+            </div>
+        }
+        @if (_error is not null)
+        {
+            <div class="alert alert-danger mt-2">@_error</div>
+        }
+    </div>
+
+    <form class="chat-input" @onsubmit="SendAsync">
+        <textarea class="form-control" rows="2" placeholder="Type a message (Enter to send, Shift+Enter for newline)"
+                  @bind="_input" @bind:event="oninput" @ref="_inputElement"
+                  disabled="@_busy"></textarea>
+        @if (_busy)
+        {
+            <button type="button" class="btn btn-secondary" @onclick="Cancel">Stop</button>
+        }
+        else
+        {
+            <button type="submit" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_input)">Send</button>
+        }
+    </form>
+</div>
+
+@code {
+    private sealed class Message(ChatRole role, string content)
+    {
+        public ChatRole Role { get; } = role;
+        public string Content { get; set; } = content;
+    }
+
+    private readonly List<Message> _messages = new();
+    private ElementReference _messagesElement;
+    private ElementReference _inputElement;
+    private IJSObjectReference? _module;
+    private CancellationTokenSource? _cts;
+    private string _input = "";
+    private string? _error;
+    private bool _busy;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/Chat.razor.js");
+            await _module.InvokeVoidAsync("enterToSubmit", _inputElement);
+        }
+
+        if (_module is not null)
+        {
+            await _module.InvokeVoidAsync("scrollToBottom", _messagesElement);
+            if (!_busy)
+            {
+                await _module.InvokeVoidAsync("focus", _inputElement);
+            }
+        }
+    }
+
+    private async Task SendAsync()
+    {
+        var text = _input.Trim();
+        if (_busy || text.Length == 0)
+        {
+            return;
+        }
+
+        _error = null;
+        _input = "";
+        _busy = true;
+        _messages.Add(new Message(ChatRole.User, text));
+        var reply = new Message(ChatRole.Assistant, "");
+        _messages.Add(reply);
+
+        var history = _messages
+            .Where(m => !ReferenceEquals(m, reply))
+            .Select(m => new ChatTurn(m.Role, m.Content))
+            .ToList();
+
+        _cts = new CancellationTokenSource();
+        try
+        {
+            await foreach (var chunk in ChatService.StreamReplyAsync(history, _cts.Token))
+            {
+                reply.Content += chunk;
+                StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _error = $"Request failed: {ex.Message}";
+        }
+        finally
+        {
+            if (reply.Content.Length == 0)
+            {
+                _messages.Remove(reply);
+            }
+
+            _cts?.Dispose();
+            _cts = null;
+            _busy = false;
+        }
+    }
+
+    private void Cancel() => _cts?.Cancel();
+
+    private void Clear()
+    {
+        _cts?.Cancel();
+        _messages.Clear();
+        _error = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts?.Cancel();
+        if (_module is not null)
+        {
+            try
+            {
+                await _module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+    }
+}
