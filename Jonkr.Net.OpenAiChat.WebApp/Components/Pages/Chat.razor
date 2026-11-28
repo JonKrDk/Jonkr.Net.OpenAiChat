@@ -3,6 +3,7 @@
 @implements IAsyncDisposable
 @inject OpenAiChatService ChatService
 @inject IJSRuntime JS
+@inject ILogger<Chat> logger
 
 <PageTitle>Chat</PageTitle>
 
@@ -71,6 +72,8 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        logger.LogDebug($"OnAfterRenderAsync(firstRender={firstRender})");
+
         if (firstRender)
         {
             _module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/Chat.razor.js");
@@ -89,6 +92,8 @@
 
     private async Task SendAsync()
     {
+        logger.LogDebug($"SendAsync()");
+
         var text = _input.Trim();
         if (_busy || text.Length == 0)
         {
@@ -140,6 +145,8 @@
 
     private void Clear()
     {
+        logger.LogDebug($"Clear()");
+
         _cts?.Cancel();
         _messages.Clear();
         _error = null;
@@ -147,6 +154,8 @@
 
     public async ValueTask DisposeAsync()
     {
+        logger.LogDebug($"DisposeAsync()");
+
         _cts?.Cancel();
         if (_module is not null)
         {
