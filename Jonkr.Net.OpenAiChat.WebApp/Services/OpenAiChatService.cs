@@ -1,6 +1,7 @@
-using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Options;
 using OpenAI.Chat;
+using Serilog.Core;
+using System.Runtime.CompilerServices;
 
 namespace Jonkr.Net.OpenAiChat.WebApp.Services;
 
@@ -23,9 +24,14 @@ public class OpenAiChatService
 {
     private readonly ChatClient _client;
     private readonly string _systemPrompt;
+    private readonly ILogger<OpenAiChatService> logger;
 
-    public OpenAiChatService(IOptions<OpenAiOptions> options)
+    public OpenAiChatService(IOptions<OpenAiOptions> options, ILogger<OpenAiChatService> logger)
     {
+        this.logger = logger;
+
+        logger.LogDebug($"OpenAiChatService()");
+
         var o = options.Value;
         if (string.IsNullOrWhiteSpace(o.ApiKey))
         {
@@ -41,6 +47,8 @@ public class OpenAiChatService
         IEnumerable<ChatTurn> history,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        logger.LogDebug($"StreamReplyAsync(history={history}, cancellationToken={cancellationToken})");
+
         var messages = new List<ChatMessage> { new SystemChatMessage(_systemPrompt) };
         foreach (var turn in history)
         {

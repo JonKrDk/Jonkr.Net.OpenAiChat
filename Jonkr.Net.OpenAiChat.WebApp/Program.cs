@@ -1,5 +1,6 @@
 using Jonkr.Net.OpenAiChat.WebApp.Components;
 using Jonkr.Net.OpenAiChat.WebApp.Services;
+using Serilog;
 
 namespace Jonkr.Net.OpenAiChat.WebApp
 {
@@ -8,6 +9,11 @@ namespace Jonkr.Net.OpenAiChat.WebApp
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            // Add Serilog logging configuration
+            builder.Host.UseSerilog((ctx, lc) =>
+                lc.ReadFrom.Configuration(ctx.Configuration)
+            );
 
             // Add services to the container.
             builder.Services.AddRazorComponents()
